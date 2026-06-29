@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Phone,
   Coins,
@@ -357,6 +359,119 @@ export default function Home() {
     }
   };
 
+  const downloadInvoice = async (payment: PaymentLog) => {
+    const doc = new jsPDF();
+    
+    // Load logo
+    const img = new Image();
+    img.src = '/logo2.jpg';
+    await new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve; // proceed even if it fails
+    });
+
+    let textStartY = 20;
+    
+    if (img.complete && img.naturalWidth > 0) {
+      // Adjust dimensions for the wider logo
+      doc.addImage(img, 'JPEG', 14, 14, 45, 12);
+      textStartY = 35; // Move text beneath the wide logo
+    }
+
+    // Header (Company Details)
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 58, 138); // Blue color
+    doc.text("Bitlance Tech Hub", 14, textStartY);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text("Complete AI Solutions", 14, textStartY + 6);
+    doc.text("Email: bitlanceai@gmail.com", 14, textStartY + 12);
+    
+    // Invoice Title
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.text("TAX INVOICE", 140, 20);
+    
+    // Invoice Details
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Invoice No: INV-${payment.order_id.substring(6, 14)}`, 140, 30);
+    doc.text(`Date: ${new Date(payment.created_at).toLocaleDateString()}`, 140, 36);
+    doc.text(`Order ID: ${payment.order_id}`, 140, 42);
+    
+    // Line separator
+    const lineY = Math.max(textStartY + 20, 55);
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, lineY, 196, lineY);
+    
+    // Bill To
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Bill To:", 14, lineY + 10);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Customer Email: ${userEmail || 'Client'}`, 14, lineY + 16);
+    doc.text("Bitlance Client", 14, lineY + 22);
+    
+    // Table
+    const baseAmount = payment.amount;
+    const taxAmount = Number((baseAmount * 0.18).toFixed(2));
+    const totalAmount = baseAmount + taxAmount;
+    
+    autoTable(doc, {
+      startY: lineY + 35,
+      head: [['Description', 'Base Amount (INR)', 'GST (18%)', 'Total (INR)']],
+      body: [
+        ['Wallet Credits Recharge', `${baseAmount.toFixed(2)}`, `${taxAmount.toFixed(2)}`, `${totalAmount.toFixed(2)}`],
+      ],
+      headStyles: {
+        fillColor: [30, 58, 138],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+      },
+      styles: {
+        fontSize: 10,
+        cellPadding: 6,
+      },
+      columnStyles: {
+        1: { halign: 'right' },
+        2: { halign: 'right' },
+        3: { halign: 'right' },
+      },
+      theme: 'grid',
+    });
+    
+    // Summary
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    
+    doc.setFontSize(10);
+    doc.text("Total Base Amount:", 130, finalY);
+    doc.text(`Rs. ${baseAmount.toFixed(2)}`, 196, finalY, { align: 'right' });
+    
+    doc.text("Total GST (18%):", 130, finalY + 8);
+    doc.text(`Rs. ${taxAmount.toFixed(2)}`, 196, finalY + 8, { align: 'right' });
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Total Amount:", 130, finalY + 18);
+    doc.text(`Rs. ${totalAmount.toFixed(2)}`, 196, finalY + 18, { align: 'right' });
+    
+    // Footer
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(150, 150, 150);
+    doc.text("Thank you for your business!", 105, 280, { align: 'center' });
+    doc.text("This is a computer generated invoice and requires no signature.", 105, 286, { align: 'center' });
+    
+    // Save PDF
+    doc.save(`Bitlance-Invoice-${payment.order_id}.pdf`);
+  };
+
   const handleTriggerCall = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!triggerPhone || !triggerAgentId) {
@@ -475,7 +590,7 @@ export default function Home() {
   }
 
   const isAdmin = userEmail === 'uttamrajsingh423@gmail.com' || token === 'dummy-token-for-dev';
-  const displayCredits = isAdmin ? stats.creditsRemaining : 50;
+  const displayCredits = stats.creditsRemaining !== undefined ? stats.creditsRemaining : 0;
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 relative">
@@ -637,12 +752,34 @@ export default function Home() {
                       <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{call.transcript_preview}</p>
                     )}
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end gap-2">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
                       In Progress
                     </span>
-                    <p className="text-xs text-slate-500 mt-1">Started: {new Date(call.started_at).toLocaleTimeString()}</p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`${BACKEND_URL}/billing/force-terminate/${call.call_id}`, {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${token}` }
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            showToast('Call forcefully terminated.', 'success');
+                            fetchData(token);
+                          } else {
+                            showToast('Error terminating: ' + data.error, 'error');
+                          }
+                        } catch (err: any) {
+                          showToast('Request failed', 'error');
+                        }
+                      }}
+                      className="text-[10px] bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 px-2 py-1 rounded font-medium transition-colors"
+                    >
+                      End Call
+                    </button>
+                    <p className="text-xs text-slate-500">Started: {new Date(call.started_at).toLocaleTimeString()}</p>
                   </div>
                 </div>
               ))}
@@ -767,6 +904,7 @@ export default function Home() {
                         <button
                           onClick={() => {
                             showToast('Downloading Invoice for ' + p.order_id, 'info');
+                            downloadInvoice(p);
                           }}
                           className="text-slate-400 hover:text-slate-200 transition-colors"
                           title="Download Invoice"
