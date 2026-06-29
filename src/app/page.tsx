@@ -302,6 +302,16 @@ export default function Home() {
   const handleRecharge = async () => {
     setRecharging(true);
     try {
+      if (!(window as any).Razorpay) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.body.appendChild(script);
+        });
+      }
+
       // 1. Create order on backend
       const res = await fetch(`${BACKEND_URL}/billing/razorpay/create-order`, {
         method: 'POST',
@@ -660,8 +670,7 @@ export default function Home() {
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-10 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Load Razorpay SDK */}
-      <script src="https://checkout.razorpay.com/v1/checkout.js" async></script>
+      {/* Load Razorpay SDK is now done dynamically */}
 
       <div className="max-w-7xl mx-auto space-y-8 relative z-10">
 
