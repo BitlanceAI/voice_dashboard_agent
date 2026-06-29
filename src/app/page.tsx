@@ -648,8 +648,12 @@ export default function Home() {
             </div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Available Credits</p>
             <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-3xl font-extrabold text-blue-50">{displayCredits.toLocaleString()}</p>
-              <p className="text-xs font-semibold text-emerald-400" title="1 Credit = ₹1.00">≈ ₹{displayCredits.toLocaleString()}</p>
+              <p className="text-3xl font-extrabold text-blue-50">
+                {displayCredits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs font-semibold text-emerald-400" title="1 Credit = ₹1.00">
+                ≈ ₹{displayCredits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
             </div>
           </div>
 
