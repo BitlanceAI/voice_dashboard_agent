@@ -111,15 +111,9 @@ export default function Home() {
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001/api';
   const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
 
-  // Load token from localStorage
+  // Token persistence removed per user request: forcing login on every load.
   useEffect(() => {
-    const savedToken = localStorage.getItem('billing_auth_token');
-    const savedEmail = localStorage.getItem('billing_user_email');
-    if (savedToken) {
-      setToken(savedToken);
-      setIsLoggedIn(true);
-      if (savedEmail) setUserEmail(savedEmail);
-    }
+    // Intentionally empty: user must log in every time.
   }, []);
 
   // Fetch Dashboard data
@@ -270,8 +264,6 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.success && data.token) {
-        localStorage.setItem('billing_auth_token', data.token);
-        localStorage.setItem('billing_user_email', data.user?.email || email);
         setToken(data.token);
         setUserEmail(data.user?.email || email);
         setIsLoggedIn(true);
@@ -287,8 +279,6 @@ export default function Home() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('billing_auth_token');
-    localStorage.removeItem('billing_user_email');
     setIsLoggedIn(false);
     setToken('');
     setUserEmail('');
@@ -625,8 +615,6 @@ export default function Home() {
                 const demoEmail = 'bitlanceai@gmail.com';
                 setToken(demoToken);
                 setUserEmail(demoEmail);
-                localStorage.setItem('billing_auth_token', demoToken);
-                localStorage.setItem('billing_user_email', demoEmail);
                 setIsLoggedIn(true);
                 setError('');
               } else {
