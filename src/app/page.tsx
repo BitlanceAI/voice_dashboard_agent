@@ -1047,16 +1047,8 @@ export default function Home() {
                     {/* Sentiment */}
                     {sentiment && (
                       <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl space-y-2">
-                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sentiment</h4>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                            sentiment.includes('Positive') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                            sentiment.includes('Negative') ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                            'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-                          }`}>
-                            {sentiment}
-                          </span>
-                        </div>
+                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sentiment & Response</h4>
+                        <p className="text-sm text-slate-300 leading-relaxed">{sentiment}</p>
                       </div>
                     )}
 
