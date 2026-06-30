@@ -1126,9 +1126,9 @@ export default function Home() {
               </div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Verification Email Sent! 🎙</h3>
               <p className="text-xs sm:text-sm text-slate-650 dark:text-slate-400 leading-relaxed">
-                Thank you for signing up! We've sent a verification email to <strong className="text-slate-850 dark:text-slate-200">{resendEmailAddress || 'your email address'}</strong>.
+                Thank you for signing up! We've sent a verification email to <strong className="text-slate-800 dark:text-slate-200">{resendEmailAddress || 'your email address'}</strong>.
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-500 leading-relaxed bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-850">
+              <p className="text-xs text-slate-500 dark:text-slate-500 leading-relaxed bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
                 Please check your inbox (and spam folder), click the verification link to activate your account, and then log in.
               </p>
               <div className="pt-2">
@@ -1147,7 +1147,7 @@ export default function Home() {
     );
   }
 
-  const isAdmin = userEmail === 'itm.lotlite@gmail.com' || userEmail === 'bitlanceai@gmail.com';
+  const isAdmin = userEmail === 'itm.lotlite@gmail.com' || userEmail === 'bitlanceai@gmail.com' || userEmail === 'bookishalok@gmail.com';
   const displayCredits = stats.creditsRemaining !== undefined ? stats.creditsRemaining : 0;
 
   return (
@@ -1549,14 +1549,27 @@ export default function Home() {
           .split('\n')
           .filter((line: string) => line.trim().length > 0)
           .map((line: string) => {
-            const index = line.indexOf(':');
-            if (index > -1) {
+            // Match bracketed timestamp at start, e.g. [17:33:43.532+00:00] assistant: text
+            const timestampMatch = line.match(/^\[([^\]]+)\]\s*(.*)$/);
+            let timeStr = "";
+            let remaining = line;
+            if (timestampMatch) {
+              timeStr = timestampMatch[1];
+              remaining = timestampMatch[2];
+            }
+            
+            const colonIndex = remaining.indexOf(':');
+            if (colonIndex > -1) {
+              const speaker = remaining.substring(0, colonIndex).trim();
+              const text = remaining.substring(colonIndex + 1).trim();
               return {
-                speaker: line.substring(0, index).trim(),
-                text: line.substring(index + 1).trim()
+                speaker,
+                text,
+                timestamp: timeStr
               };
             }
-            return { speaker: 'System', text: line };
+            
+            return { speaker: 'System', text: line, timestamp: timeStr };
           });
 
         return (
@@ -1612,18 +1625,19 @@ export default function Home() {
                   {/* Left: Transcript bubbles (3 columns) */}
                   <div className="lg:col-span-3 space-y-4">
                     <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Conversation Transcript</h4>
-                    <div className="bg-slate-100 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-850 p-4 rounded-xl text-sm max-h-[45vh] overflow-y-auto space-y-4 font-sans">
+                    <div className="bg-slate-100 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 p-4 rounded-xl text-sm max-h-[45vh] overflow-y-auto space-y-4 font-sans">
                       {transcriptLines.length > 0 ? (
-                        transcriptLines.map((line: { speaker: string; text: string }, idx: number) => {
-                          const isAI = line.speaker.toLowerCase() === 'ai' || line.speaker.toLowerCase() === 'system';
+                        transcriptLines.map((line: { speaker: string; text: string; timestamp?: string }, idx: number) => {
+                          const isAI = ['ai', 'system', 'assistant', 'agent'].includes(line.speaker.toLowerCase());
+                          const cleanSpeaker = line.speaker.toLowerCase() === 'assistant' ? 'AI Agent' : (line.speaker.toLowerCase() === 'user' ? 'Customer' : line.speaker);
                           return (
                             <div key={idx} className={`flex flex-col ${isAI ? 'items-start' : 'items-end'}`}>
                               <span className="text-[10px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">
-                                {line.speaker}
+                                {cleanSpeaker} {line.timestamp && `• ${line.timestamp}`}
                               </span>
                               <div className={`p-3 rounded-2xl max-w-[85%] text-sm leading-relaxed ${
                                 isAI 
-                                  ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none shadow-sm' 
+                                  ? 'bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none shadow-sm' 
                                   : 'bg-cyan-600 text-white rounded-tr-none shadow-sm'
                               }`}>
                                 {line.text}
@@ -1641,7 +1655,7 @@ export default function Home() {
                   <div className="lg:col-span-2 space-y-6">
                     {/* Summary */}
                     {summary && (
-                      <div className="bg-white dark:bg-slate-955/40 border border-slate-200 dark:border-slate-850 p-4 rounded-xl space-y-2">
+                      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 rounded-xl space-y-2">
                         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Summary</h4>
                         <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{summary}</p>
                       </div>
@@ -1649,7 +1663,7 @@ export default function Home() {
 
                     {/* Sentiment */}
                     {sentiment && (
-                      <div className="bg-white dark:bg-slate-955/40 border border-slate-200 dark:border-slate-850 p-4 rounded-xl space-y-2">
+                      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 rounded-xl space-y-2">
                         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sentiment & Response</h4>
                         <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{sentiment}</p>
                       </div>
@@ -1657,29 +1671,29 @@ export default function Home() {
 
                     {/* Extracted Entities */}
                     {entities && Object.values(entities).some(val => val !== null && val !== '') && (
-                      <div className="bg-white dark:bg-slate-955/40 border border-slate-200 dark:border-slate-850 p-4 rounded-xl space-y-3">
+                      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 rounded-xl space-y-3">
                         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Extracted Information</h4>
                         <div className="space-y-2.5">
                           {(entities.client_name || entities.patient_name) && (
-                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-805/40">
+                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-800/40">
                               <span className="text-slate-500 dark:text-slate-400">Client Name</span>
                               <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.client_name || entities.patient_name}</span>
                             </div>
                           )}
                           {entities.department && (
-                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-805/40">
+                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-800/40">
                               <span className="text-slate-500 dark:text-slate-400">Requested Department</span>
                               <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.department}</span>
                             </div>
                           )}
                           {entities.appointment_date && (
-                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-805/40">
+                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-800/40">
                               <span className="text-slate-500 dark:text-slate-400">Appointment Date</span>
                               <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.appointment_date}</span>
                             </div>
                           )}
                           {entities.mobile && (
-                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-805/40">
+                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-800/40">
                               <span className="text-slate-500 dark:text-slate-400">Mobile</span>
                               <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.mobile}</span>
                             </div>
