@@ -20,6 +20,7 @@ import {
   Info
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
+import { supabase as sbClient } from '@/lib/supabase';
 
 interface Stats {
   creditsRemaining: number;
@@ -41,6 +42,14 @@ interface CallLog {
   recording_url: string | null;
   transcript: string | null;
   started_at: string;
+  // enriched from call_analytics
+  overall_sentiment?: string;
+  interest_level?: string;
+  buying_intent?: string;
+  call_outcome?: string;
+  sentiment_score?: number;
+  summary?: string;
+  analytics_id?: string;
 }
 
 interface ActiveCall {
@@ -68,6 +77,10 @@ export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [name, setName] = useState<string>('');
+  const [mobile, setMobile] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [isSignUp, setIsSignUp] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [loggingIn, setLoggingIn] = useState<boolean>(false);
   const [stats, setStats] = useState<Stats>({
@@ -114,8 +127,8 @@ export default function Home() {
 
   // Restore session persistence for the current logged-in user
   useEffect(() => {
-    const savedToken = localStorage.getItem('billing_auth_token');
-    const savedEmail = localStorage.getItem('billing_user_email');
+    const savedToken = sessionStorage.getItem('billing_auth_token');
+    const savedEmail = sessionStorage.getItem('billing_user_email');
     if (savedToken) {
       setToken(savedToken);
       setIsLoggedIn(true);
@@ -148,7 +161,45 @@ export default function Home() {
       const historyRes = await fetch(`${BACKEND_URL}/billing/call-history?limit=20`, { headers });
       const historyData = await historyRes.json();
       if (historyData.success) {
-        setCallHistory(historyData.calls);
+        const calls: CallLog[] = historyData.calls;
+        
+        // Enrich with analytics from Supabase using customer phone numbers
+        try {
+          if (sbClient && calls.length > 0) {
+            // Normalize: strip leading + and spaces for comparison
+            const normalize = (p: string) => p.replace(/^\+/, '').replace(/\s/g, '');
+
+            const phones = calls.map((c) => c.customer_number).filter(Boolean);
+            const { data: analytics } = await sbClient
+              .from('call_analytics')
+              .select('id, customer_phone, overall_sentiment, interest_level, buying_intent, call_outcome, sentiment_score, summary');
+
+            if (analytics && analytics.length > 0) {
+              // Build map keyed by normalized phone
+              const map: Record<string, any> = {};
+              analytics.forEach((a: any) => {
+                if (a.customer_phone) map[normalize(a.customer_phone)] = a;
+              });
+
+              calls.forEach((c) => {
+                const a = map[normalize(c.customer_number)];
+                if (a) {
+                  c.overall_sentiment = a.overall_sentiment;
+                  c.interest_level    = a.interest_level;
+                  c.buying_intent     = a.buying_intent;
+                  c.call_outcome      = a.call_outcome;
+                  c.sentiment_score   = a.sentiment_score;
+                  c.summary           = a.summary;
+                  c.analytics_id      = a.id;
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.warn('Could not enrich call history with analytics:', e);
+        }
+
+        setCallHistory(calls);
       }
 
       // Fetch payments
@@ -254,42 +305,87 @@ export default function Home() {
     };
   }, [isLoggedIn, token]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
       setError('Email and password are required');
       return;
     }
+
+    // Custom credential check for itm.lotlite@gmail.com
+    if (!isSignUp && email.trim().toLowerCase() === 'itm.lotlite@gmail.com' && password === 'admin123') {
+      setLoggingIn(true);
+      const demoToken = 'dummy-token-for-dev';
+      sessionStorage.setItem('billing_auth_token', demoToken);
+      sessionStorage.setItem('billing_user_email', 'itm.lotlite@gmail.com');
+      setToken(demoToken);
+      setUserEmail('itm.lotlite@gmail.com');
+      setIsLoggedIn(true);
+      setError('');
+      setLoggingIn(false);
+      return;
+    }
+    if (isSignUp) {
+      if (!name.trim()) {
+        setError('Name is required for sign up');
+        return;
+      }
+      if (!mobile.trim()) {
+        setError('Mobile number is required for sign up');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match');
+        return;
+      }
+    }
     setLoggingIn(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/auth/login`, {
+      const endpoint = isSignUp ? '/auth/signup' : '/auth/login';
+      const body = isSignUp ? { email, password, name, mobile } : { email, password };
+      
+      const res = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
-      if (data.success && data.token) {
-        localStorage.setItem('billing_auth_token', data.token);
-        localStorage.setItem('billing_user_email', data.user?.email || email);
-        setToken(data.token);
-        setUserEmail(data.user?.email || email);
-        setIsLoggedIn(true);
-        setError('');
+      
+      if (data.success) {
+        if (data.token) {
+          sessionStorage.setItem('billing_auth_token', data.token);
+          sessionStorage.setItem('billing_user_email', data.user?.email || email);
+          setToken(data.token);
+          setUserEmail(data.user?.email || email);
+          setIsLoggedIn(true);
+          setError('');
+          if (isSignUp) {
+            showToast('Sign up successful! 10 credits added.', 'success');
+          }
+        } else if (isSignUp && data.message) {
+          // If no token is returned on signup, it means email verification is required
+          showToast(data.message, 'info');
+          setError('');
+          // Switch to login screen so they can log in after verifying
+          setIsSignUp(false);
+        } else {
+          setError(isSignUp ? 'Signup failed' : 'Invalid credentials');
+        }
       } else {
-        setError(data.error || 'Invalid credentials');
+        setError(data.error || (isSignUp ? 'Signup failed' : 'Invalid credentials'));
       }
     } catch (err: any) {
-      setError('Login failed: ' + err.message);
+      setError((isSignUp ? 'Signup failed: ' : 'Login failed: ') + err.message);
     } finally {
       setLoggingIn(false);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('billing_auth_token');
-    localStorage.removeItem('billing_user_email');
+    sessionStorage.removeItem('billing_auth_token');
+    sessionStorage.removeItem('billing_user_email');
     setIsLoggedIn(false);
     setToken('');
     setUserEmail('');
@@ -555,11 +651,8 @@ export default function Home() {
 
         <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-blue-600/10 border border-blue-500/20 rounded-2xl flex items-center justify-center mb-4">
-              <PhoneCall className="w-8 h-8 text-blue-400" />
-            </div>
-            <h1 className="text-2xl font-bold text-center">Bitlance Voice Agent</h1>
-            <p className="text-sm text-slate-400 mt-1">Single-Client Billing Dashboard</p>
+            <img src="/logo.jpg" alt="Logo" className="h-16 w-auto rounded-xl object-contain mb-4" />
+            <p className="text-sm text-slate-400">Single-Client Billing Dashboard</p>
           </div>
 
           {error && (
@@ -569,7 +662,42 @@ export default function Home() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-4">
+            {isSignUp && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                    Name
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your Name"
+                      className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-3 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                    Mobile Number
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      required
+                      value={mobile}
+                      onChange={(e) => setMobile(e.target.value)}
+                      placeholder="+1 (555) 000-0000"
+                      className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-3 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                    />
+                    <Phone className="absolute right-4 top-3.5 w-4 h-4 text-slate-500 pointer-events-none" />
+                  </div>
+                </div>
+              </>
+            )}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
                 Email Address
@@ -603,76 +731,58 @@ export default function Home() {
               </div>
             </div>
 
+            {isSignUp && (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500 rounded-lg py-3 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                  />
+                  <Lock className="absolute right-4 top-3.5 w-4 h-4 text-slate-500 pointer-events-none" />
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loggingIn}
-              className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 py-3 rounded-lg font-semibold text-sm transition-colors shadow-lg shadow-blue-500/20"
+              className="w-full bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 disabled:opacity-50 py-3 rounded-lg font-semibold text-sm transition-colors shadow-lg shadow-cyan-500/20"
             >
-              {loggingIn ? 'Signing In...' : 'Sign In to Dashboard'}
+              {loggingIn ? (isSignUp ? 'Signing Up...' : 'Signing In...') : (isSignUp ? 'Sign Up' : 'Sign In to Dashboard')}
             </button>
           </form>
 
-          <div className="relative flex items-center justify-center my-6">
-            <div className="absolute inset-x-0 h-px bg-slate-800" />
-            <span className="relative bg-slate-900 px-3 text-xs text-slate-500 font-semibold uppercase">Admin Access</span>
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+            >
+              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            </button>
           </div>
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              if (formData.get('adminEmail') === 'bitlanceai@gmail.com' && formData.get('adminPassword') === 'admin123') {
-                const demoToken = 'dummy-token-for-dev';
-                const demoEmail = 'bitlanceai@gmail.com';
-                
-                // Do NOT save admin session in localStorage so it doesn't persistently redirect to admin
-                // (or save it if you want, but the user requested standard user session, so I'll only save standard users)
-                // Wait, if they want admin to log in every time but users to stay logged in:
-                setToken(demoToken);
-                setUserEmail(demoEmail);
-                setIsLoggedIn(true);
-                setError('');
-              } else {
-                setError('Invalid admin credentials');
-              }
-            }}
-            className="space-y-3"
-          >
-            <input
-              type="email"
-              name="adminEmail"
-              required
-              placeholder="Admin Email"
-              className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-2.5 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
-            />
-            <input
-              type="password"
-              name="adminPassword"
-              required
-              placeholder="Admin Password"
-              className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-2.5 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
-            />
-            <button
-              type="submit"
-              className="w-full bg-slate-950 hover:bg-slate-850 border border-slate-800 py-3 rounded-lg font-semibold text-sm transition-colors text-slate-300"
-            >
-              Access Admin Panel
-            </button>
-          </form>
         </div>
       </main>
     );
   }
 
-  const isAdmin = userEmail === 'uttamrajsingh423@gmail.com' || token === 'dummy-token-for-dev';
+  const isAdmin = userEmail === 'itm.lotlite@gmail.com' || userEmail === 'bitlanceai@gmail.com';
   const displayCredits = stats.creditsRemaining !== undefined ? stats.creditsRemaining : 0;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 pt-24 md:p-10 relative">
+      <main className="flex-1 overflow-y-auto p-6 pt-24 md:p-10 relative bg-slate-50 dark:bg-slate-950">
         {/* Background decoration */}
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-0 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-10 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
 
         {/* Load Razorpay SDK is now done dynamically */}
@@ -680,28 +790,28 @@ export default function Home() {
         <div className="max-w-7xl mx-auto space-y-8 relative z-10">
 
         {/* HEADER */}
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-900 pb-6">
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-900 pb-6">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-              Client Billing Portal
+            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-400 via-sky-400 to-teal-400 bg-clip-text text-transparent">
+              Client Voice Agent Portal
             </h1>
-            <p className="text-sm text-slate-400 mt-1">Real-time calls tracking & billing analytics</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Real-time calls tracking & billing analytics</p>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowTriggerModal(true)}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5 transition-colors shadow-lg shadow-blue-500/20"
+              className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5 transition-colors shadow-lg shadow-cyan-500/20"
             >
               <PhoneCall className="w-3.5 h-3.5" />
               Trigger Call
             </button>
-            <div className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-xs flex items-center gap-2">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2 text-xs flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-slate-400 font-medium">Live Feed Connected</span>
+              <span className="text-slate-500 dark:text-slate-400 font-medium">Live Feed Connected</span>
             </div>
             <button
               onClick={handleLogout}
-              className="bg-slate-900 hover:bg-slate-800 border border-slate-800 p-2 rounded-lg text-slate-400 hover:text-slate-200 transition-colors"
+              className="bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
               title="Logout"
             >
               <LogOut className="w-4 h-4" />
@@ -712,19 +822,19 @@ export default function Home() {
         {/* STATS OVERVIEW */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
 
-          <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
             <div className="flex justify-between items-start mb-4">
-              <Coins className="w-6 h-6 text-blue-400" />
+              <Coins className="w-6 h-6 text-cyan-400" />
               <button
                 onClick={() => setShowRechargeModal(true)}
-                className="text-xs bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full font-semibold transition-colors"
+                className="text-xs bg-cyan-600/10 hover:bg-cyan-600/20 text-cyan-500 dark:text-cyan-400 border border-cyan-500/20 px-2.5 py-1 rounded-full font-semibold transition-colors"
               >
                 Recharge
               </button>
             </div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Available Credits</p>
             <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-3xl font-extrabold text-blue-50">
+              <p className="text-3xl font-extrabold text-slate-900 dark:text-cyan-50">
                 {displayCredits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
               <p className="text-xs font-semibold text-emerald-400" title="1 Credit = ₹1.00">
@@ -733,7 +843,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
             <div className="flex justify-between items-start mb-4">
               <PhoneCall className="w-6 h-6 text-emerald-400" />
               {stats.activeCalls > 0 && (
@@ -741,58 +851,58 @@ export default function Home() {
               )}
             </div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Calls</p>
-            <p className="text-3xl font-extrabold mt-1 text-emerald-50">{stats.activeCalls}</p>
+            <p className="text-3xl font-extrabold mt-1 text-slate-900 dark:text-emerald-50">{stats.activeCalls}</p>
           </div>
 
-          <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
             <div className="flex justify-between items-start mb-4">
               <Clock className="w-6 h-6 text-purple-400" />
             </div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Minutes Used Today</p>
-            <p className="text-3xl font-extrabold mt-1 text-purple-50">{stats.minutesUsedToday} min</p>
+            <p className="text-3xl font-extrabold mt-1 text-slate-900 dark:text-purple-50">{stats.minutesUsedToday} min</p>
           </div>
 
-          <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
             <div className="flex justify-between items-start mb-4">
               <TrendingUp className="w-6 h-6 text-indigo-400" />
             </div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Calls</p>
-            <p className="text-3xl font-extrabold mt-1 text-indigo-50">{stats.totalCalls}</p>
+            <p className="text-3xl font-extrabold mt-1 text-slate-900 dark:text-indigo-50">{stats.totalCalls}</p>
           </div>
         </section>
 
         {/* PRICING & CREDIT INFO BANNER */}
-        <section className="bg-gradient-to-r from-blue-950/20 via-slate-900/40 to-indigo-950/20 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <section className="bg-gradient-to-r from-cyan-950/10 dark:from-cyan-950/20 via-white dark:via-slate-900/40 to-sky-950/10 dark:to-sky-950/20 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex gap-4">
-            <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400 border border-blue-500/20 flex-shrink-0 flex items-center justify-center">
+            <div className="p-3 bg-cyan-500/10 rounded-xl text-cyan-500 dark:text-cyan-400 border border-cyan-500/20 flex-shrink-0 flex items-center justify-center">
               <Info className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-100 text-sm md:text-base">Credits & Billing Structure</h3>
-              <p className="text-xs text-slate-400 mt-1 leading-relaxed max-w-2xl">
-                1 Credit = ₹1.00 INR. Voice calls consume exactly <span className="font-semibold text-blue-400">5 credits per minute</span> (equivalent to ₹5.00/min), calculated proportionally based on seconds used. Balance is updated in real-time as calls start and finish.
+              <h3 className="font-bold text-slate-950 dark:text-slate-100 text-sm md:text-base">Credits & Billing Structure</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed max-w-2xl">
+                1 Credit = ₹1.00 INR. Voice calls consume exactly <span className="font-semibold text-cyan-500 dark:text-cyan-400">5 credits per minute</span> (equivalent to ₹5.00/min), calculated proportionally based on seconds used. Balance is updated in real-time as calls start and finish.
               </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <span className="text-xs font-semibold px-3 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-slate-300">
+            <span className="text-xs font-semibold px-3 py-1.5 bg-white dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-700 dark:text-slate-300">
               Rate: ₹5.00 / minute
             </span>
-            <span className="text-xs font-semibold px-3 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-slate-300">
+            <span className="text-xs font-semibold px-3 py-1.5 bg-white dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-700 dark:text-slate-300">
               Value: 1 Credit = ₹1.00
             </span>
           </div>
         </section>
 
         {/* ACTIVE / LIVE CALLS SECTION */}
-        <section className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-md">
+        <section className="bg-white dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800/50 rounded-2xl p-6 backdrop-blur-md">
           <div className="flex items-center gap-2 mb-6">
             <Phone className="w-5 h-5 text-emerald-400" />
             <h2 className="text-lg font-bold">Current Active Calls</h2>
           </div>
 
           {activeCalls.length === 0 ? (
-            <div className="border border-dashed border-slate-800/80 rounded-xl p-8 text-center text-slate-500">
+            <div className="border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-8 text-center text-slate-500">
               <p className="text-sm">No calls are currently active.</p>
               <p className="text-xs mt-1">Live active calls will appear here automatically.</p>
             </div>
@@ -801,14 +911,14 @@ export default function Home() {
                {activeCalls.map((call) => (
                 <div
                   key={call.call_id}
-                  className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 flex items-center justify-between animate-pulse"
+                  className="bg-slate-100 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800/80 rounded-xl p-4 flex items-center justify-between animate-pulse"
                 >
                   <div className="space-y-1">
-                    <p className="text-sm font-semibold text-slate-200">{call.customer_number}</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-200">{call.customer_number}</p>
                     <p className="text-xs text-slate-400">Agent: {call.agent_name}</p>
                     {call.duration !== undefined && (
                       <div className="flex gap-2 items-center mt-1 flex-wrap">
-                        <span className="text-[10px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-slate-300">
+                        <span className="text-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
                           {Math.floor(call.duration / 60)}m {call.duration % 60}s
                         </span>
                         {call.credits_used !== undefined && (
@@ -821,7 +931,7 @@ export default function Home() {
                             href={call.recording_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-medium"
+                            className="text-[10px] bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 border border-cyan-500/20 px-1.5 py-0.5 rounded font-medium"
                           >
                             Recording
                           </a>
@@ -868,62 +978,106 @@ export default function Home() {
         </section>
 
         {/* CALL HISTORY TABLE */}
-        <section className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-md">
+        <section className="bg-white dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800/50 rounded-2xl p-6 backdrop-blur-md">
           <div className="flex items-center gap-2 mb-6">
-            <History className="w-5 h-5 text-blue-400" />
+            <History className="w-5 h-5 text-cyan-400" />
             <h2 className="text-lg font-bold">Call History</h2>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4">Customer</th>
                   <th className="py-3 px-4">Duration</th>
-                  <th className="py-3 px-4">Credits Used</th>
+                  <th className="py-3 px-4">Credits</th>
                   <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Sentiment</th>
+                  <th className="py-3 px-4">Interest</th>
+                  <th className="py-3 px-4">Intent</th>
                   <th className="py-3 px-4">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-850">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-850">
                 {callHistory.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
+                    <td colSpan={9} className="py-8 text-center text-slate-500">
                       No call records found.
                     </td>
                   </tr>
                 ) : (
-                  callHistory.map((call) => (
-                    <tr key={call.id} className="hover:bg-slate-900/35 transition-colors">
-                      <td className="py-4 px-4 text-xs text-slate-400">
-                        {new Date(call.started_at).toLocaleString()}
-                      </td>
-                      <td className="py-4 px-4 font-medium">{call.customer_number}</td>
-                      <td className="py-4 px-4 text-slate-300">
-                        {Math.floor(call.duration / 60)}m {call.duration % 60}s
-                      </td>
-                      <td className="py-4 px-4 font-semibold text-slate-200">
-                        {call.credits_used}
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${call.status === 'completed'
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : 'bg-amber-500/10 text-amber-400'
-                          }`}>
-                          {call.status}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <button
-                          onClick={() => setSelectedCall(call)}
-                          className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
-                        >
-                          View Transcript
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  callHistory.map((call) => {
+                    const sentimentColor =
+                      call.overall_sentiment === 'positive' ? 'text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30' :
+                      call.overall_sentiment === 'negative' ? 'text-rose-500 dark:text-rose-400 bg-rose-500/10 border-rose-500/30' :
+                      'text-slate-650 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700';
+                    const levelColor = (v?: string) =>
+                      v?.toLowerCase() === 'high'   ? 'text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border-cyan-500/20' :
+                      v?.toLowerCase() === 'medium' ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border-indigo-500/20' :
+                      'text-slate-650 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700';
+                    return (
+                      <tr key={call.id} className="hover:bg-slate-100 dark:hover:bg-slate-900/35 transition-colors">
+                        <td className="py-4 px-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          {new Date(call.started_at).toLocaleString()}
+                        </td>
+                        <td className="py-4 px-4 font-medium text-slate-900 dark:text-slate-100">{call.customer_number}</td>
+                        <td className="py-4 px-4 text-slate-600 dark:text-slate-300">
+                          {Math.floor(call.duration / 60)}m {call.duration % 60}s
+                        </td>
+                        <td className="py-4 px-4 font-semibold text-slate-900 dark:text-slate-200">
+                          {call.credits_used}
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${call.status === 'completed'
+                              ? 'bg-emerald-500/10 text-emerald-400'
+                              : 'bg-amber-500/10 text-amber-400'
+                            }`}>
+                            {call.status}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          {call.overall_sentiment ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border capitalize ${sentimentColor}`}>
+                              {call.overall_sentiment}
+                            </span>
+                          ) : <span className="text-slate-600 text-xs">—</span>}
+                        </td>
+                        <td className="py-4 px-4">
+                          {call.interest_level ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border capitalize ${levelColor(call.interest_level)}`}>
+                              {call.interest_level}
+                            </span>
+                          ) : <span className="text-slate-600 text-xs">—</span>}
+                        </td>
+                        <td className="py-4 px-4">
+                          {call.buying_intent ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border capitalize ${levelColor(call.buying_intent)}`}>
+                              {call.buying_intent}
+                            </span>
+                          ) : <span className="text-slate-600 text-xs">—</span>}
+                        </td>
+                        <td className="py-4 px-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setSelectedCall(call)}
+                              className="text-xs text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 font-semibold"
+                            >
+                              Transcript
+                            </button>
+                            {call.analytics_id && (
+                              <a
+                                href={`/dashboard?id=${call.analytics_id}`}
+                                className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
+                              >
+                                Analytics →
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -931,7 +1085,7 @@ export default function Home() {
         </section>
 
         {/* PAYMENTS HISTORY */}
-        <section className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-md">
+        <section className="bg-white dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800/50 rounded-2xl p-6 backdrop-blur-md">
           <div className="flex items-center gap-2 mb-6">
             <CreditCard className="w-5 h-5 text-purple-400" />
             <h2 className="text-lg font-bold">Payments & Recharges</h2>
@@ -940,7 +1094,7 @@ export default function Home() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
                   <th className="py-3 px-4">Order ID</th>
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4">Amount</th>
@@ -949,7 +1103,7 @@ export default function Home() {
                   <th className="py-3 px-4">Invoice</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-850">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-850">
                 {payments.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-slate-500">
@@ -958,12 +1112,12 @@ export default function Home() {
                   </tr>
                 ) : (
                   payments.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-900/35 transition-colors">
-                      <td className="py-4 px-4 font-mono text-xs text-slate-300">{p.order_id}</td>
+                    <tr key={p.id} className="hover:bg-slate-100 dark:hover:bg-slate-900/35 transition-colors">
+                      <td className="py-4 px-4 font-mono text-xs text-slate-700 dark:text-slate-300">{p.order_id}</td>
                       <td className="py-4 px-4 text-xs text-slate-400">
                         {new Date(p.created_at).toLocaleString()}
                       </td>
-                      <td className="py-4 px-4 font-medium text-slate-200">₹{p.amount}</td>
+                      <td className="py-4 px-4 font-medium text-slate-900 dark:text-slate-200">₹{p.amount}</td>
                       <td className="py-4 px-4 text-slate-400">₹{(p.amount * 0.18).toFixed(2)}</td>
                       <td className="py-4 px-4">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${p.status === 'PAID' || p.status === 'SUCCESS'
@@ -1034,28 +1188,28 @@ export default function Home() {
 
         return (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-              <div className="p-6 border-b border-slate-800 flex justify-between items-start">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+              <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-start">
                 <div>
-                  <h3 className="text-lg font-bold">Call Details</h3>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Call Details</h3>
                   <div className="flex gap-4 mt-1">
-                    <p className="text-xs text-slate-400">Customer: <span className="text-slate-200 font-semibold">{selectedCall.customer_number}</span></p>
-                    <p className="text-xs text-slate-400">Duration: <span className="text-slate-200 font-semibold">{Math.floor(selectedCall.duration / 60)}m {selectedCall.duration % 60}s</span></p>
-                    <p className="text-xs text-slate-400 font-medium">Credits: <span className="text-slate-200 font-bold">{selectedCall.credits_used}</span></p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Customer: <span className="text-slate-900 dark:text-slate-200 font-semibold">{selectedCall.customer_number}</span></p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Duration: <span className="text-slate-900 dark:text-slate-200 font-semibold">{Math.floor(selectedCall.duration / 60)}m {selectedCall.duration % 60}s</span></p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Credits: <span className="text-slate-900 dark:text-slate-200 font-bold">{selectedCall.credits_used}</span></p>
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedCall(null)}
-                  className="text-slate-400 hover:text-slate-200 font-semibold text-sm transition-colors"
+                  className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 font-semibold text-sm transition-colors"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-900/50">
+              <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50 dark:bg-slate-900/50">
                 {/* Custom Audio Player with Speed Control */}
                 {selectedCall.recording_url && (
-                  <div className="bg-slate-950/50 border border-slate-850 p-4 rounded-xl space-y-3">
+                  <div className="bg-white dark:bg-slate-955/50 border border-slate-200 dark:border-slate-850 p-4 rounded-xl space-y-3">
                     <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Audio Recording</h4>
                     <div className="flex items-center gap-4">
                       <audio id="call-audio-player" controls src={selectedCall.recording_url} className="w-full flex-1" />
@@ -1066,7 +1220,7 @@ export default function Home() {
                             const audio = document.getElementById('call-audio-player') as HTMLAudioElement | null;
                             if (audio) audio.playbackRate = parseFloat(e.target.value);
                           }}
-                          className="bg-slate-900 border border-slate-800 text-xs px-2 py-1.5 rounded-lg text-slate-200 focus:outline-none cursor-pointer"
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs px-2 py-1.5 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
                           defaultValue="1"
                         >
                           <option value="0.75">0.75x</option>
@@ -1085,7 +1239,7 @@ export default function Home() {
                   {/* Left: Transcript bubbles (3 columns) */}
                   <div className="lg:col-span-3 space-y-4">
                     <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Conversation Transcript</h4>
-                    <div className="bg-slate-950/80 border border-slate-850 p-4 rounded-xl text-sm max-h-[45vh] overflow-y-auto space-y-4 font-sans">
+                    <div className="bg-slate-100 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-850 p-4 rounded-xl text-sm max-h-[45vh] overflow-y-auto space-y-4 font-sans">
                       {transcriptLines.length > 0 ? (
                         transcriptLines.map((line: { speaker: string; text: string }, idx: number) => {
                           const isAI = line.speaker.toLowerCase() === 'ai' || line.speaker.toLowerCase() === 'system';
@@ -1096,8 +1250,8 @@ export default function Home() {
                               </span>
                               <div className={`p-3 rounded-2xl max-w-[85%] text-sm leading-relaxed ${
                                 isAI 
-                                  ? 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none' 
-                                  : 'bg-indigo-600/90 text-white rounded-tr-none'
+                                  ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none shadow-sm' 
+                                  : 'bg-cyan-600 text-white rounded-tr-none shadow-sm'
                               }`}>
                                 {line.text}
                               </div>
@@ -1114,53 +1268,53 @@ export default function Home() {
                   <div className="lg:col-span-2 space-y-6">
                     {/* Summary */}
                     {summary && (
-                      <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl space-y-2">
+                      <div className="bg-white dark:bg-slate-955/40 border border-slate-200 dark:border-slate-850 p-4 rounded-xl space-y-2">
                         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Summary</h4>
-                        <p className="text-sm text-slate-300 leading-relaxed">{summary}</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{summary}</p>
                       </div>
                     )}
 
                     {/* Sentiment */}
                     {sentiment && (
-                      <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl space-y-2">
+                      <div className="bg-white dark:bg-slate-955/40 border border-slate-200 dark:border-slate-850 p-4 rounded-xl space-y-2">
                         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sentiment & Response</h4>
-                        <p className="text-sm text-slate-300 leading-relaxed">{sentiment}</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{sentiment}</p>
                       </div>
                     )}
 
                     {/* Extracted Entities */}
                     {entities && Object.values(entities).some(val => val !== null && val !== '') && (
-                      <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl space-y-3">
+                      <div className="bg-white dark:bg-slate-955/40 border border-slate-200 dark:border-slate-850 p-4 rounded-xl space-y-3">
                         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Extracted Information</h4>
                         <div className="space-y-2.5">
                           {(entities.client_name || entities.patient_name) && (
-                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-805/40">
-                              <span className="text-slate-400">Client Name</span>
-                              <span className="text-slate-200 font-semibold">{entities.client_name || entities.patient_name}</span>
+                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-805/40">
+                              <span className="text-slate-500 dark:text-slate-400">Client Name</span>
+                              <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.client_name || entities.patient_name}</span>
                             </div>
                           )}
                           {entities.department && (
-                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-805/40">
-                              <span className="text-slate-400">Requested Department</span>
-                              <span className="text-slate-200 font-semibold">{entities.department}</span>
+                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-805/40">
+                              <span className="text-slate-500 dark:text-slate-400">Requested Department</span>
+                              <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.department}</span>
                             </div>
                           )}
                           {entities.appointment_date && (
-                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-805/40">
-                              <span className="text-slate-400">Appointment Date</span>
-                              <span className="text-slate-200 font-semibold">{entities.appointment_date}</span>
+                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-805/40">
+                              <span className="text-slate-500 dark:text-slate-400">Appointment Date</span>
+                              <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.appointment_date}</span>
                             </div>
                           )}
                           {entities.mobile && (
-                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-805/40">
-                              <span className="text-slate-400">Mobile</span>
-                              <span className="text-slate-200 font-semibold">{entities.mobile}</span>
+                            <div className="flex justify-between items-center text-xs py-1 border-b border-slate-200 dark:border-slate-805/40">
+                              <span className="text-slate-500 dark:text-slate-400">Mobile</span>
+                              <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.mobile}</span>
                             </div>
                           )}
                           {entities.email && (
                             <div className="flex justify-between items-center text-xs py-1">
-                              <span className="text-slate-400">Email</span>
-                              <span className="text-slate-200 font-semibold">{entities.email}</span>
+                              <span className="text-slate-500 dark:text-slate-400">Email</span>
+                              <span className="text-slate-800 dark:text-slate-200 font-semibold">{entities.email}</span>
                             </div>
                           )}
                         </div>
@@ -1177,12 +1331,12 @@ export default function Home() {
       {/* TRIGGER OUTBOUND CALL MODAL */}
       {showTriggerModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-              <h3 className="text-lg font-bold">Trigger Outbound Call</h3>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Trigger Outbound Call</h3>
               <button
                 onClick={() => setShowTriggerModal(false)}
-                className="text-slate-400 hover:text-slate-200 font-semibold text-sm"
+                className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 font-semibold text-sm"
               >
                 Cancel
               </button>
@@ -1199,7 +1353,7 @@ export default function Home() {
                   value={triggerPhone}
                   onChange={(e) => setTriggerPhone(e.target.value)}
                   placeholder="e.g. +919876543210"
-                  className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                  className="w-full bg-white dark:bg-slate-955/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
                 />
               </div>
 
@@ -1219,7 +1373,7 @@ export default function Home() {
                           setTriggerAgentId(val);
                         }
                       }}
-                      className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-100 focus:outline-none transition-colors mb-3"
+                      className="w-full bg-white dark:bg-slate-955/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 focus:outline-none transition-colors mb-3"
                     >
                       {workflows.map((wf) => (
                         <option key={wf.workflow_id} value={wf.workflow_id}>
@@ -1237,7 +1391,7 @@ export default function Home() {
                         value={triggerAgentId}
                         onChange={(e) => setTriggerAgentId(e.target.value)}
                         placeholder="Enter your custom voice agent UUID"
-                        className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                        className="w-full bg-white dark:bg-slate-955/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
                       />
                     )}
                   </>
@@ -1248,7 +1402,7 @@ export default function Home() {
                     value={triggerAgentId}
                     onChange={(e) => setTriggerAgentId(e.target.value)}
                     placeholder="Enter your voice agent UUID"
-                    className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                    className="w-full bg-white dark:bg-slate-955/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
                   />
                 )}
               </div>
@@ -1256,7 +1410,7 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={triggering}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 py-3 rounded-lg font-semibold text-sm transition-colors shadow-lg shadow-blue-500/20"
+                className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 py-3 rounded-lg font-semibold text-sm transition-colors shadow-lg shadow-cyan-500/20 text-white"
               >
                 {triggering ? 'Initiating Call...' : 'Call Customer Now'}
               </button>
@@ -1294,7 +1448,7 @@ export default function Home() {
                   value={rechargeAmount}
                   onChange={(e) => setRechargeAmount(parseInt(e.target.value) || 0)}
                   placeholder="e.g. 1000"
-                  className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                  className="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
                 />
                 <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
                   Min amount is ₹100. Credits will be automatically synchronized with your main Supabase account upon successful payment.
@@ -1308,8 +1462,8 @@ export default function Home() {
                     type="button"
                     onClick={() => setRechargeAmount(preset)}
                     className={`flex-1 py-1.5 text-xs font-semibold border rounded-lg transition-all ${rechargeAmount === preset
-                        ? 'bg-blue-600/10 border-blue-500 text-blue-400 shadow-md shadow-blue-500/5'
-                        : 'border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        ? 'bg-cyan-600/10 border-cyan-500 text-cyan-500 dark:text-cyan-400 shadow-md shadow-cyan-500/5'
+                        : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
                       }`}
                   >
                     ₹{preset}
@@ -1320,7 +1474,7 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={recharging}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 py-3 rounded-lg font-semibold text-sm transition-colors shadow-lg shadow-blue-500/20 mt-4 flex items-center justify-center gap-1.5"
+                className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 py-3 rounded-lg font-semibold text-sm transition-colors shadow-lg shadow-cyan-500/20 mt-4 flex items-center justify-center gap-1.5"
               >
                 {recharging ? 'Processing Payment...' : 'Proceed with Razorpay'}
               </button>

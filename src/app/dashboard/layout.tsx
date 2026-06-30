@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Sidebar from "@/components/Sidebar";
+import AdminGuard from "@/components/AdminGuard";
 
 export const metadata: Metadata = {
   title: "Bitlance Call Analytics",
@@ -15,7 +16,9 @@ export default function DashboardLayout({
     <div className="flex flex-1 h-screen w-full overflow-hidden">
       <Sidebar />
       <div className="flex-1 overflow-y-auto pt-16 md:pt-0 bg-slate-50 dark:bg-slate-950">
-        {children}
+        <AdminGuard>
+          {children}
+        </AdminGuard>
       </div>
     </div>
   );

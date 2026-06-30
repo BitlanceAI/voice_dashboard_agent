@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Sidebar from "@/components/Sidebar";
+import AdminGuard from "@/components/AdminGuard";
 
 export const metadata: Metadata = {
   title: "Bitlance Leads",
@@ -15,7 +16,9 @@ export default function LeadsLayout({
     <div className="flex flex-1 h-screen overflow-hidden">
       <Sidebar />
       <div className="flex-1 overflow-y-auto pt-16 md:pt-0">
-        {children}
+        <AdminGuard>
+          {children}
+        </AdminGuard>
       </div>
     </div>
   );

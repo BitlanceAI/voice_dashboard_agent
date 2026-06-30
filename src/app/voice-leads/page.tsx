@@ -1,60 +1,115 @@
-import { supabase, supabaseAdmin } from "@/lib/supabase";
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import VoiceLeadsTable, { VoiceLead } from "@/components/ui/VoiceLeadsTable";
 
-export default async function VoiceLeadsPage() {
-  let leads: VoiceLead[] | null = null;
-  let error = null;
+export default function VoiceLeadsPage() {
+  const [leads, setLeads] = useState<VoiceLead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const client = supabaseAdmin || supabase;
-  if (client) {
-    const res = await client
-      .from("lotlite_leads")
-      .select(
-        "id, call_id, call_time, duration_seconds, preferred_language, purpose, full_name, mobile_number, email, property_type, city, locality, budget, size_bhk, amenities, move_in_timeline, recording_url, transcript_url, phone_number"
-      )
-      .order("call_time", { ascending: false })
-      .limit(100);
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const token = sessionStorage.getItem("billing_auth_token");
+        const email = sessionStorage.getItem("billing_user_email");
+        
+        if (!token) {
+          setError("Not logged in");
+          setLoading(false);
+          return;
+        }
 
-    leads = res.data as VoiceLead[];
-    error = res.error;
-  } else {
-    error = { message: "Supabase client not initialized (check .env.local)" };
+        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://backend.bitlancetechhub.com/api";
+        
+        // 1. Fetch user's own call history to know which numbers they own
+        const historyRes = await fetch(`${BACKEND_URL}/billing/call-history?limit=250`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const historyData = await historyRes.json();
+        
+        if (!historyData.success) {
+          setError(historyData.error || "Failed to fetch call history");
+          setLoading(false);
+          return;
+        }
+
+        const calls = historyData.calls || [];
+        const normalize = (p: string) => p.replace(/^\+/, '').replace(/\s/g, '');
+        const myPhonesSet = new Set(calls.map((c: any) => normalize(c.customer_number || '')).filter(Boolean));
+
+        // 2. Fetch voice leads from new Supabase
+        if (!supabase) {
+          setError("Database connection not initialized");
+          setLoading(false);
+          return;
+        }
+
+        const { data: voiceLeads, error: sbError } = await supabase
+          .from("lotlite_leads")
+          .select("id, call_id, call_time, duration_seconds, preferred_language, purpose, full_name, mobile_number, email, property_type, city, locality, budget, size_bhk, amenities, move_in_timeline, recording_url, transcript_url, phone_number")
+          .order("call_time", { ascending: false });
+
+        if (sbError) {
+          setError(sbError.message);
+          setLoading(false);
+          return;
+        }
+
+        // Check if the user has Admin rights
+        const isAdmin = email === "itm.lotlite@gmail.com" || email === "bitlanceai@gmail.com";
+
+        // 3. Filter voice leads: show all for admins, otherwise filter by my campaign phone numbers
+        const filteredLeads = (voiceLeads || []).filter((item: any) => {
+          if (isAdmin) return true;
+          const num = item.mobile_number || item.phone_number;
+          if (!num) return false;
+          return myPhonesSet.has(normalize(num));
+        }) as VoiceLead[];
+
+        setLeads(filteredLeads);
+      } catch (err: any) {
+        setError(err.message || "An error occurred");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
+        <div className="flex items-center justify-center h-64 text-slate-400">
+          <div className="animate-pulse">Loading voice leads...</div>
+        </div>
+      </main>
+    );
   }
 
   if (error) {
-    console.warn("Supabase fetch warning on voice-leads page:", error.message || error);
+    return (
+      <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
+        <div className="flex items-center justify-center h-64 text-rose-400 font-semibold">
+          Error: {error}
+        </div>
+      </main>
+    );
   }
-
-  const displayLeads = leads || [];
 
   return (
     <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full">
-      {error && (
-        <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm border-2 border-red-600">
-          <strong>Warning:</strong> Could not fetch from Supabase table{" "}
-          <code>lotlite_leads</code>.
-          <br />
-          <pre className="mt-2 text-xs">{JSON.stringify(error, null, 2)}</pre>
-        </div>
-      )}
-      
-      {leads?.length === 0 && !error && (
-        <div className="bg-blue-50 text-blue-700 px-4 py-3 rounded-lg text-sm border-2 border-blue-600">
-          <strong>Debug Info:</strong> The query succeeded but returned 0 rows. 
-          This usually means either the table is empty or Row Level Security (RLS) is blocking the read access for the anonymous key.
-        </div>
-      )}
-
       <div>
-        <h1 className="text-3xl font-black tracking-tight text-slate-100">
+        <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100">
           Voice Leads
         </h1>
         <p className="text-slate-400 mt-1">
-          All inbound leads captured by the Bitlance Voice Dashboard.
+          All inbound leads captured by the Voice Dashboard.
         </p>
       </div>
 
-      <VoiceLeadsTable leads={displayLeads} />
+      <VoiceLeadsTable leads={leads} />
     </main>
   );
 }
