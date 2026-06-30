@@ -17,7 +17,9 @@ import {
   LogOut,
   CheckCircle,
   AlertCircle,
-  Info
+  Info,
+  Sun,
+  Moon
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import { supabase as sbClient } from '@/lib/supabase';
@@ -74,6 +76,26 @@ interface PaymentLog {
 
 export default function Home() {
   const [token, setToken] = useState<string>('');
+  const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('dark');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' || 'dark';
+      setPageTheme(savedTheme);
+    }
+  }, []);
+
+  const togglePageTheme = () => {
+    const newTheme = pageTheme === 'dark' ? 'light' : 'dark';
+    setPageTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
@@ -645,18 +667,28 @@ export default function Home() {
   // Render Login Screen if not logged in
   if (!isLoggedIn) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+      <main className="min-h-screen bg-slate-50 dark:bg-slate-955 text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 relative transition-colors duration-300">
         {/* Background Gradients */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950 pointer-events-none" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-500/10 dark:from-blue-900/20 via-slate-50 dark:via-slate-950 to-slate-50 dark:to-slate-950 pointer-events-none transition-colors duration-300" />
 
-        <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl shadow-2xl relative z-10">
+        <div className="w-full max-w-md bg-white dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-8 rounded-2xl shadow-2xl relative z-10 transition-colors duration-300">
+          {/* Theme Toggle Button */}
+          <button
+            onClick={togglePageTheme}
+            type="button"
+            className="absolute top-6 right-6 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+            title="Toggle theme"
+          >
+            {pageTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
           <div className="flex flex-col items-center mb-8">
-            <img src="/logo.jpg" alt="Logo" className="h-16 w-auto rounded-xl object-contain mb-4" />
-            <p className="text-sm text-slate-400">Single-Client Billing Dashboard</p>
+            <img src="/logo.jpg" alt="Logo" className="h-16 w-auto rounded-xl object-contain mb-4 dark:invert dark:hue-rotate-180 transition-all duration-300" />
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Single-Client Billing Dashboard</p>
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg flex items-center gap-2 mb-6 text-sm">
+            <div className="bg-red-500/10 border border-red-500/20 text-red-650 dark:text-red-400 p-3 rounded-lg flex items-center gap-2 mb-6 text-sm">
               <AlertCircle className="w-4 h-4" />
               <span>{error}</span>
             </div>
@@ -666,7 +698,7 @@ export default function Home() {
             {isSignUp && (
               <>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                     Name
                   </label>
                   <div className="relative">
@@ -676,12 +708,12 @@ export default function Home() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Your Name"
-                      className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-3 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                      className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-3 px-4 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                     Mobile Number
                   </label>
                   <div className="relative">
@@ -691,15 +723,15 @@ export default function Home() {
                       value={mobile}
                       onChange={(e) => setMobile(e.target.value)}
                       placeholder="+1 (555) 000-0000"
-                      className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-3 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                      className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-3 px-4 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
                     />
-                    <Phone className="absolute right-4 top-3.5 w-4 h-4 text-slate-500 pointer-events-none" />
+                    <Phone className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                   </div>
                 </div>
               </>
             )}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                 Email Address
               </label>
               <div className="relative">
@@ -709,13 +741,13 @@ export default function Home() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@example.com"
-                  className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-3 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                  className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-3 px-4 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                 Password
               </label>
               <div className="relative">
@@ -725,15 +757,15 @@ export default function Home() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-950/80 border border-slate-800 focus:border-blue-500 rounded-lg py-3 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                  className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-3 px-4 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
                 />
-                <Lock className="absolute right-4 top-3.5 w-4 h-4 text-slate-500 pointer-events-none" />
+                <Lock className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
               </div>
             </div>
 
             {isSignUp && (
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                   Confirm Password
                 </label>
                 <div className="relative">
@@ -743,9 +775,9 @@ export default function Home() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500 rounded-lg py-3 px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+                    className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-3 px-4 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
                   />
-                  <Lock className="absolute right-4 top-3.5 w-4 h-4 text-slate-500 pointer-events-none" />
+                  <Lock className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                 </div>
               </div>
             )}
@@ -753,7 +785,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={loggingIn}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 disabled:opacity-50 py-3 rounded-lg font-semibold text-sm transition-colors shadow-lg shadow-cyan-500/20"
+              className="w-full bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 disabled:opacity-50 py-3 rounded-lg font-semibold text-sm transition-colors shadow-lg shadow-cyan-500/20 text-white"
             >
               {loggingIn ? (isSignUp ? 'Signing Up...' : 'Signing In...') : (isSignUp ? 'Sign Up' : 'Sign In to Dashboard')}
             </button>
@@ -763,7 +795,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setIsSignUp(!isSignUp)}
-              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+              className="text-xs text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 font-semibold"
             >
               {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
             </button>
