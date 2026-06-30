@@ -110,6 +110,7 @@ export default function Home() {
   const [agreedToTerms, setAgreedToTerms] = useState<boolean>(false);
   const [showTermsModal, setShowTermsModal] = useState<boolean>(false);
   const [showResendModal, setShowResendModal] = useState<boolean>(false);
+  const [showVerificationModal, setShowVerificationModal] = useState<boolean>(false);
   const [resendEmailAddress, setResendEmailAddress] = useState<string>('');
   const [sendingResend, setSendingResend] = useState<boolean>(false);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
@@ -411,6 +412,10 @@ export default function Home() {
           setError('');
           // Switch to login screen so they can log in after verifying
           setIsSignUp(false);
+          // Pre-fill email for resend verification just in case
+          setResendEmailAddress(email);
+          // Show verification prompt popup
+          setShowVerificationModal(true);
           // Set cooldown to 60 seconds
           setCooldownSeconds(60);
         } else {
@@ -734,7 +739,15 @@ export default function Home() {
           </button>
 
           <div className="flex flex-col items-center mb-8">
-            <img src="/logo.jpg" alt="Logo" className="h-16 w-auto rounded-xl object-contain mb-4 mix-blend-multiply dark:invert dark:hue-rotate-180 dark:mix-blend-screen transition-all duration-300" />
+            <img 
+              src="/logo.jpg" 
+              alt="Logo" 
+              className="h-16 w-auto rounded-xl object-contain mb-4 transition-all duration-300" 
+              style={{
+                mixBlendMode: pageTheme === 'dark' ? 'screen' : 'multiply',
+                filter: pageTheme === 'dark' ? 'invert(1) hue-rotate(180deg) contrast(300%)' : 'none'
+              }}
+            />
             <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Single-Client Billing Dashboard</p>
           </div>
 
@@ -911,7 +924,15 @@ export default function Home() {
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl relative transition-all duration-300">
               <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
                 <div className="flex items-center gap-3">
-                  <img src="/logo.jpg" alt="Logo" className="h-8 w-auto rounded-lg object-contain mix-blend-multiply dark:invert dark:hue-rotate-180 dark:mix-blend-screen transition-all duration-300" />
+                  <img 
+                    src="/logo.jpg" 
+                    alt="Logo" 
+                    className="h-8 w-auto rounded-lg object-contain transition-all duration-300" 
+                    style={{
+                      mixBlendMode: pageTheme === 'dark' ? 'screen' : 'multiply',
+                      filter: pageTheme === 'dark' ? 'invert(1) hue-rotate(180deg) contrast(300%)' : 'none'
+                    }}
+                  />
                   <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Terms of Service</h3>
                 </div>
                 <button
@@ -1042,7 +1063,15 @@ export default function Home() {
                 </div>
 
                 <div className="pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col items-center gap-2">
-                  <img src="/logo.jpg" alt="Logo" className="h-10 w-auto rounded-lg object-contain mix-blend-multiply dark:invert dark:hue-rotate-180 dark:mix-blend-screen transition-all duration-300" />
+                  <img 
+                    src="/logo.jpg" 
+                    alt="Logo" 
+                    className="h-10 w-auto rounded-lg object-contain transition-all duration-300" 
+                    style={{
+                      mixBlendMode: pageTheme === 'dark' ? 'screen' : 'multiply',
+                      filter: pageTheme === 'dark' ? 'invert(1) hue-rotate(180deg) contrast(300%)' : 'none'
+                    }}
+                  />
                   <p className="text-[10px] text-slate-400">© 2026 Bitlance Voice AI Agent. All Rights Reserved.</p>
                 </div>
               </div>
@@ -1101,6 +1130,33 @@ export default function Home() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* SIGNUP SUCCESS VERIFICATION PROMPT MODAL */}
+        {showVerificationModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 text-center space-y-4 relative transition-all duration-300">
+              <div className="mx-auto w-12 h-12 bg-cyan-100 dark:bg-cyan-950/80 rounded-full flex items-center justify-center text-cyan-600 dark:text-cyan-400">
+                <CheckCircle className="w-6 h-6 animate-pulse" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Verification Email Sent! 🎙</h3>
+              <p className="text-xs sm:text-sm text-slate-650 dark:text-slate-400 leading-relaxed">
+                Thank you for signing up! We've sent a verification email to <strong className="text-slate-850 dark:text-slate-200">{resendEmailAddress || 'your email address'}</strong>.
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-500 leading-relaxed bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-850">
+                Please check your inbox (and spam folder), click the verification link to activate your account, and then log in.
+              </p>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowVerificationModal(false)}
+                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors shadow-lg shadow-cyan-500/20"
+                >
+                  Got it, I will verify and login
+                </button>
+              </div>
             </div>
           </div>
         )}
