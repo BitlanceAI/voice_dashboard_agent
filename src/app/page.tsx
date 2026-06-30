@@ -110,6 +110,7 @@ export default function Home() {
   const [showResendModal, setShowResendModal] = useState<boolean>(false);
   const [resendEmailAddress, setResendEmailAddress] = useState<string>('');
   const [sendingResend, setSendingResend] = useState<boolean>(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
   const [stats, setStats] = useState<Stats>({
     creditsRemaining: 0,
     todayCalls: 0,
@@ -162,6 +163,15 @@ export default function Home() {
       if (savedEmail) setUserEmail(savedEmail);
     }
   }, []);
+
+  // Countdown timer for resend verification email cooldown
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
 
   // Fetch Dashboard data
   const fetchData = async (authToken: string) => {
@@ -397,6 +407,8 @@ export default function Home() {
           setError('');
           // Switch to login screen so they can log in after verifying
           setIsSignUp(false);
+          // Set cooldown to 60 seconds
+          setCooldownSeconds(60);
         } else {
           setError(isSignUp ? 'Signup failed' : 'Invalid credentials');
         }
@@ -430,6 +442,8 @@ export default function Home() {
         showToast(data.message || 'Verification email resent!', 'success');
         setShowResendModal(false);
         setResendEmailAddress('');
+        // Start 60 seconds cooldown
+        setCooldownSeconds(60);
       } else {
         showToast(data.error || 'Failed to resend verification email', 'error');
       }
@@ -861,10 +875,13 @@ export default function Home() {
               <div>
                 <button
                   type="button"
+                  disabled={cooldownSeconds > 0}
                   onClick={() => setShowResendModal(true)}
-                  className="text-[11px] text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 font-medium transition-colors"
+                  className="text-xs sm:text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Didn't receive verification email? Resend
+                  {cooldownSeconds > 0
+                    ? `Didn't receive verification email? Resend in ${cooldownSeconds}s`
+                    : "Didn't receive verification email? Resend"}
                 </button>
               </div>
             )}
