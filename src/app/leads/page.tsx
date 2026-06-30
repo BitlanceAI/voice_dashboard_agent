@@ -38,6 +38,7 @@ export default function LeadsPage() {
         const calls = historyData.calls || [];
         const normalize = (p: string) => p.replace(/^\+/, '').replace(/\s/g, '');
         const myPhonesSet = new Set(calls.map((c: any) => normalize(c.customer_number || '')).filter(Boolean));
+        const myCallIdsSet = new Set(calls.map((c: any) => String(c.call_id || '')).filter(Boolean));
 
         // 2. Fetch analytics from new Supabase
         if (!supabase) {
@@ -48,7 +49,7 @@ export default function LeadsPage() {
 
         const { data: analytics, error: sbError } = await supabase
           .from("call_analytics")
-          .select("id, created_at, call_outcome, interest_level, buying_intent, overall_sentiment, customer_name, customer_phone, summary, sentiment_score, confidence, key_topics")
+          .select("id, call_id, created_at, call_outcome, interest_level, buying_intent, overall_sentiment, customer_name, customer_phone, summary, sentiment_score, confidence, key_topics")
           .order("created_at", { ascending: false });
 
         if (sbError) {
@@ -60,11 +61,12 @@ export default function LeadsPage() {
         // Check if the user has Admin rights
         const isAdmin = email === "itm.lotlite@gmail.com" || email === "bitlanceai@gmail.com" || email === "bookishalok@gmail.com";
 
-        // 3. Filter analytics in memory: show all for admins, otherwise filter by my campaign phone numbers
+        // 3. Filter analytics in memory: show all for admins, otherwise filter by organization's calls
         const filteredLeads = (analytics || []).filter((item: any) => {
           if (isAdmin) return true;
-          if (!item.customer_phone) return false;
-          return myPhonesSet.has(normalize(item.customer_phone));
+          if (item.call_id && myCallIdsSet.has(String(item.call_id))) return true;
+          if (item.customer_phone && myPhonesSet.has(normalize(item.customer_phone))) return true;
+          return false;
         }) as LeadRecord[];
 
         setLeads(filteredLeads);

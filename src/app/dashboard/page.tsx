@@ -43,6 +43,7 @@ function DashboardContent() {
         const calls = historyData.calls || [];
         const normalize = (p: string) => p.replace(/^\+/, '').replace(/\s/g, '');
         const myPhonesSet = new Set(calls.map((c: any) => normalize(c.customer_number || '')).filter(Boolean));
+        const myCallIdsSet = new Set(calls.map((c: any) => String(c.call_id || '')).filter(Boolean));
 
         // 2. Fetch analytics from new Supabase
         if (!supabase) {
@@ -66,11 +67,12 @@ function DashboardContent() {
         // Check if the user has Admin rights
         const isAdmin = email === "itm.lotlite@gmail.com" || email === "bitlanceai@gmail.com" || email === "bookishalok@gmail.com";
 
-        // Filter the records in memory: show all for admins, otherwise filter by my campaign phone numbers
+        // Filter the records in memory: show all for admins, otherwise filter by organization's calls
         const userRecords = (analytics || []).filter((item: any) => {
           if (isAdmin) return true;
-          if (!item.customer_phone) return false;
-          return myPhonesSet.has(normalize(item.customer_phone));
+          if (item.call_id && myCallIdsSet.has(String(item.call_id))) return true;
+          if (item.customer_phone && myPhonesSet.has(normalize(item.customer_phone))) return true;
+          return false;
         }) as CallData[];
 
         setAllRecords(userRecords);

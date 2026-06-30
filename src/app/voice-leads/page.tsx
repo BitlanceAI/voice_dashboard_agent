@@ -38,6 +38,7 @@ export default function VoiceLeadsPage() {
         const calls = historyData.calls || [];
         const normalize = (p: string) => p.replace(/^\+/, '').replace(/\s/g, '');
         const myPhonesSet = new Set(calls.map((c: any) => normalize(c.customer_number || '')).filter(Boolean));
+        const myCallIdsSet = new Set(calls.map((c: any) => String(c.call_id || '')).filter(Boolean));
 
         // 2. Fetch voice leads from new Supabase
         if (!supabase) {
@@ -60,12 +61,13 @@ export default function VoiceLeadsPage() {
         // Check if the user has Admin rights
         const isAdmin = email === "itm.lotlite@gmail.com" || email === "bitlanceai@gmail.com" || email === "bookishalok@gmail.com";
 
-        // 3. Filter voice leads: show all for admins, otherwise filter by my campaign phone numbers
+        // 3. Filter voice leads: show all for admins, otherwise filter by organization's calls
         const filteredLeads = (voiceLeads || []).filter((item: any) => {
           if (isAdmin) return true;
+          if (item.call_id && myCallIdsSet.has(String(item.call_id))) return true;
           const num = item.mobile_number || item.phone_number;
-          if (!num) return false;
-          return myPhonesSet.has(normalize(num));
+          if (num && myPhonesSet.has(normalize(num))) return true;
+          return false;
         }) as VoiceLead[];
 
         setLeads(filteredLeads);
