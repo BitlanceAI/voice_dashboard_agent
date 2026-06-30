@@ -59,7 +59,7 @@ export default function LeadsPage() {
         }
 
         // Check if the user has Admin rights
-        const isAdmin = email === "itm.lotlite@gmail.com" || email === "bitlanceai@gmail.com" || email === "bookishalok@gmail.com";
+        const isAdmin = email === "bitlanceai@gmail.com";
 
         // 3. Filter analytics in memory: show all for admins, otherwise filter by organization's calls
         const filteredLeads = (analytics || []).filter((item: any) => {

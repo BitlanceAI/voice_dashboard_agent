@@ -65,7 +65,7 @@ function DashboardContent() {
         }
 
         // Check if the user has Admin rights
-        const isAdmin = email === "itm.lotlite@gmail.com" || email === "bitlanceai@gmail.com" || email === "bookishalok@gmail.com";
+        const isAdmin = email === "bitlanceai@gmail.com";
 
         // Filter the records in memory: show all for admins, otherwise filter by organization's calls
         const userRecords = (analytics || []).filter((item: any) => {

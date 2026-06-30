@@ -1147,7 +1147,7 @@ export default function Home() {
     );
   }
 
-  const isAdmin = userEmail === 'itm.lotlite@gmail.com' || userEmail === 'bitlanceai@gmail.com' || userEmail === 'bookishalok@gmail.com';
+  const isAdmin = userEmail === 'bitlanceai@gmail.com';
   const displayCredits = stats.creditsRemaining !== undefined ? stats.creditsRemaining : 0;
 
   return (
