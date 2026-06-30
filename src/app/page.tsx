@@ -1726,7 +1726,7 @@ export default function Home() {
                   value={triggerPhone}
                   onChange={(e) => setTriggerPhone(e.target.value)}
                   placeholder="e.g. +919876543210"
-                  className="w-full bg-white dark:bg-slate-955/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
                 />
               </div>
 
@@ -1746,7 +1746,7 @@ export default function Home() {
                           setTriggerAgentId(val);
                         }
                       }}
-                      className="w-full bg-white dark:bg-slate-955/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 focus:outline-none transition-colors mb-3"
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 focus:outline-none transition-colors mb-3"
                     >
                       {workflows.map((wf) => (
                         <option key={wf.workflow_id} value={wf.workflow_id}>
@@ -1764,7 +1764,7 @@ export default function Home() {
                         value={triggerAgentId}
                         onChange={(e) => setTriggerAgentId(e.target.value)}
                         placeholder="Enter your custom voice agent UUID"
-                        className="w-full bg-white dark:bg-slate-955/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
                       />
                     )}
                   </>
@@ -1775,7 +1775,7 @@ export default function Home() {
                     value={triggerAgentId}
                     onChange={(e) => setTriggerAgentId(e.target.value)}
                     placeholder="Enter your voice agent UUID"
-                    className="w-full bg-white dark:bg-slate-955/80 border border-slate-200 dark:border-slate-800 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-cyan-500 rounded-lg py-2.5 px-3.5 text-sm text-slate-850 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-colors"
                   />
                 )}
               </div>
