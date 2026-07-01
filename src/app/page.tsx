@@ -225,41 +225,8 @@ export default function Home() {
       if (historyData.success) {
         const calls: CallLog[] = historyData.calls;
         
-        // Enrich with analytics from Supabase using customer phone numbers
-        try {
-          if (sbClient && calls.length > 0) {
-            // Normalize: strip leading + and spaces for comparison
-            const normalize = (p: string) => p.replace(/^\+/, '').replace(/\s/g, '');
-
-            const phones = calls.map((c) => c.customer_number).filter(Boolean);
-            const { data: analytics } = await sbClient
-              .from('call_analytics')
-              .select('id, customer_phone, overall_sentiment, interest_level, buying_intent, call_outcome, sentiment_score, summary');
-
-            if (analytics && analytics.length > 0) {
-              // Build map keyed by normalized phone
-              const map: Record<string, any> = {};
-              analytics.forEach((a: any) => {
-                if (a.customer_phone) map[normalize(a.customer_phone)] = a;
-              });
-
-              calls.forEach((c) => {
-                const a = map[normalize(c.customer_number)];
-                if (a) {
-                  c.overall_sentiment = a.overall_sentiment;
-                  c.interest_level    = a.interest_level;
-                  c.buying_intent     = a.buying_intent;
-                  c.call_outcome      = a.call_outcome;
-                  c.sentiment_score   = a.sentiment_score;
-                  c.summary           = a.summary;
-                  c.analytics_id      = a.id;
-                }
-              });
-            }
-          }
-        } catch (e) {
-          console.warn('Could not enrich call history with analytics:', e);
-        }
+        // The backend now securely attaches all analytics directly to the call objects
+        // based on exact call_id matches!
 
         setCallHistory(calls);
       }
