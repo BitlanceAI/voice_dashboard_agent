@@ -40,34 +40,21 @@ export default function LeadsPage() {
         const myPhonesSet = new Set(calls.map((c: any) => normalize(c.customer_number || '')).filter(Boolean));
         const myCallIdsSet = new Set(calls.map((c: any) => String(c.call_id || '')).filter(Boolean));
 
-        // 2. Fetch analytics from new Supabase
-        if (!supabase) {
-          setError("Database connection not initialized");
+        // 2. Fetch analytics securely from the backend API
+        const analyticsRes = await fetch(`${BACKEND_URL}/billing/analytics`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const analyticsData = await analyticsRes.json();
+
+        if (!analyticsData.success) {
+          setError(analyticsData.error || "Failed to fetch analytics");
           setLoading(false);
           return;
         }
 
-        const { data: analytics, error: sbError } = await supabase
-          .from("call_analytics")
-          .select("id, call_id, created_at, call_outcome, interest_level, buying_intent, overall_sentiment, customer_name, customer_phone, summary, sentiment_score, confidence, key_topics")
-          .order("created_at", { ascending: false });
-
-        if (sbError) {
-          setError(sbError.message);
-          setLoading(false);
-          return;
-        }
-
-        // Check if the user has Admin rights
-        const isAdmin = email === "bitlanceai@gmail.com";
-
-        // 3. Filter analytics in memory: show all for admins, otherwise filter by organization's calls
-        const filteredLeads = (analytics || []).filter((item: any) => {
-          if (isAdmin) return true;
-          if (item.call_id && myCallIdsSet.has(String(item.call_id))) return true;
-          if (item.customer_phone && myPhonesSet.has(normalize(item.customer_phone))) return true;
-          return false;
-        }) as LeadRecord[];
+        const filteredLeads = analyticsData.analytics || [];
+        // Sort descending by created_at since the API sorts ascending
+        filteredLeads.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
         setLeads(filteredLeads);
       } catch (err: any) {

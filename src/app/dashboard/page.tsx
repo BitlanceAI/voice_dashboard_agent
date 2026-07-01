@@ -45,51 +45,28 @@ function DashboardContent() {
         const myPhonesSet = new Set(calls.map((c: any) => normalize(c.customer_number || '')).filter(Boolean));
         const myCallIdsSet = new Set(calls.map((c: any) => String(c.call_id || '')).filter(Boolean));
 
-        // 2. Fetch analytics from new Supabase
-        if (!supabase) {
-          setError("Database connection not initialized");
+        // 2. Fetch analytics securely from the backend API
+        const analyticsRes = await fetch(`${BACKEND_URL}/billing/analytics`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const analyticsData = await analyticsRes.json();
+
+        if (!analyticsData.success) {
+          setError(analyticsData.error || "Failed to fetch analytics");
           setLoading(false);
           return;
         }
 
-        // Fetch all call analytics (up to 250)
-        const { data: analytics, error: sbError } = await supabase
-          .from("call_analytics")
-          .select("*")
-          .order("created_at", { ascending: true });
-
-        if (sbError) {
-          setError(sbError.message);
-          setLoading(false);
-          return;
-        }
-
-        // Check if the user has Admin rights
-        const isAdmin = email === "bitlanceai@gmail.com";
-
-        // Filter the records in memory: show all for admins, otherwise filter by organization's calls
-        const userRecords = (analytics || []).filter((item: any) => {
-          if (isAdmin) return true;
-          if (item.call_id && myCallIdsSet.has(String(item.call_id))) return true;
-          if (item.customer_phone && myPhonesSet.has(normalize(item.customer_phone))) return true;
-          return false;
-        }) as CallData[];
-
+        const userRecords = analyticsData.analytics || [];
         setAllRecords(userRecords);
 
         // Determine which specific record to show
         if (recordId) {
-          const selected = (analytics || []).find(r => String(r.id) === String(recordId));
+          const selected = (userRecords || []).find((r: any) => String(r.id) === String(recordId));
           if (!selected) {
-            setError("Call analytics record not found.");
+            setError("Call analytics record not found or you do not have permission to view it.");
           } else {
-            // If they are not admin, make sure they own the record
-            const isOwned = userRecords.some(r => String(r.id) === String(selected.id));
-            if (!isAdmin && !isOwned) {
-              setError("You do not have permission to view this call's analytics.");
-            } else {
-              setData(selected as CallData);
-            }
+            setData(selected as CallData);
           }
         } else {
           // If no specific ID is requested, default to the latest call for this user/admin
