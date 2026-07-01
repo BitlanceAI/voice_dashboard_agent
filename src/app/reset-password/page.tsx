@@ -105,7 +105,7 @@ export default function ResetPasswordPage() {
             <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-650 dark:text-emerald-400 p-6 rounded-lg text-center space-y-3">
               <CheckCircle className="w-10 h-10 mx-auto text-emerald-500" />
               <h3 className="font-bold text-lg">Password Reset Successfully!</h3>
-              <p className="text-sm">You can now login with your new password. Redirecting to login...</p>
+              <p className="text-sm">You can now login with your new password. Redirecting to Voice Dashboard login...</p>
             </div>
           ) : (
             <form onSubmit={handleResetPassword} className="space-y-4">
