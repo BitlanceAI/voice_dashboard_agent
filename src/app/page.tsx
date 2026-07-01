@@ -423,7 +423,7 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.success) {
-        showToast('If your account exists, a reset link will be sent to your email.', 'success');
+        showToast('A password reset link has been sent to your email.', 'success');
         setShowForgotPasswordModal(false);
         setForgotEmail('');
       } else {
