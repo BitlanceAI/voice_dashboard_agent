@@ -136,6 +136,7 @@ export default function Home() {
 
   // Call Trigger states
   const [showTriggerModal, setShowTriggerModal] = useState<boolean>(false);
+  const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] = useState<boolean>(false);
   const [triggerPhone, setTriggerPhone] = useState<string>('');
   const [triggerAgentId, setTriggerAgentId] = useState<string>(process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID || '45b42390-369b-49b5-9a26-21a099dc843e');
   const [workflows, setWorkflows] = useState<{ workflow_id: string; workflow_name: string }[]>([]);
@@ -702,7 +703,12 @@ export default function Home() {
         setTriggerPhone('');
         fetchData(token);
       } else {
-        showToast('Failed to trigger call: ' + (data.message || data.error), 'error');
+        if (data.error === 'INSUFFICIENT_CREDITS') {
+          setShowTriggerModal(false);
+          setShowInsufficientCreditsModal(true);
+        } else {
+          showToast('Failed to trigger call: ' + (data.message || data.error), 'error');
+        }
       }
     } catch (err: any) {
       showToast('Error: ' + err.message, 'error');
@@ -1854,6 +1860,42 @@ export default function Home() {
                 {recharging ? 'Processing Payment...' : 'Proceed with Razorpay'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* INSUFFICIENT CREDITS MODAL */}
+      {showInsufficientCreditsModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 text-center space-y-6">
+            <div className="mx-auto w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-650 dark:text-red-400">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Insufficient Credits</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                You do not have enough credits to initiate a call. Please recharge your wallet to continue.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowInsufficientCreditsModal(false)}
+                className="px-4 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInsufficientCreditsModal(false);
+                  setShowRechargeModal(true);
+                }}
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-500/20"
+              >
+                Recharge
+              </button>
+            </div>
           </div>
         </div>
       )}
