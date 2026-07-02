@@ -104,7 +104,7 @@ export default function Home() {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [name, setName] = useState<string>('');
-  const [mobile, setMobile] = useState<string>('');
+  const [mobile, setMobile] = useState<string>('+91 ');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [isSignUp, setIsSignUp] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>('');
@@ -142,7 +142,7 @@ export default function Home() {
   // Call Trigger states
   const [showTriggerModal, setShowTriggerModal] = useState<boolean>(false);
   const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] = useState<boolean>(false);
-  const [triggerPhone, setTriggerPhone] = useState<string>('');
+  const [triggerPhone, setTriggerPhone] = useState<string>('+91 ');
   const [triggerAgentId, setTriggerAgentId] = useState<string>(process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID || '45b42390-369b-49b5-9a26-21a099dc843e');
   const [workflows, setWorkflows] = useState<{ workflow_id: string; workflow_name: string }[]>([]);
   const [triggering, setTriggering] = useState<boolean>(false);
