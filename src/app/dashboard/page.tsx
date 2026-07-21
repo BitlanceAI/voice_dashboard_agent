@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 import CallAnalyticsDashboard, { CallData } from "@/components/ui/CallAnalyticsDashboard";
 
 function DashboardContent() {

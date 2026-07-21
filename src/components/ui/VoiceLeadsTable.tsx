@@ -17,7 +17,6 @@ import {
   Check,
   Download,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 /** Downloads transcript text from a URL as a .txt file */
 function TranscriptButton({ url, name }: { url: string; name?: string | null }) {
@@ -134,12 +133,25 @@ export default function VoiceLeadsTable({ leads }: { leads: VoiceLead[] }) {
 
   async function handleDelete(lead: VoiceLead) {
     setDeleting(lead.id);
-    if (supabase) {
-      await supabase.from("lotlite_leads").delete().eq("id", lead.id);
+    try {
+      const token = sessionStorage.getItem("billing_auth_token");
+      const BACKEND_URL =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "https://backend.bitlancetechhub.com/api";
+      const res = await fetch(`${BACKEND_URL}/billing/voice-leads/${lead.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete lead");
+      }
+      setRows((prev) => prev.filter((r) => r.id !== lead.id));
+    } catch (err) {
+      console.error("[VoiceLeads] delete failed:", err);
+    } finally {
+      setConfirmId(null);
+      setDeleting(null);
     }
-    setRows((prev) => prev.filter((r) => r.id !== lead.id));
-    setConfirmId(null);
-    setDeleting(null);
   }
 
   const filtered = rows.filter((l) => {

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import LeadsTable, { LeadRecord } from "@/components/ui/LeadsTable";
 
 export default function LeadsPage() {

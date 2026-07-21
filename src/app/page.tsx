@@ -26,7 +26,6 @@ import {
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Logo from '@/components/Logo';
-import { supabase as sbClient } from '@/lib/supabase';
 
 interface Stats {
   creditsRemaining: number;
