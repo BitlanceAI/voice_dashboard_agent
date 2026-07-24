@@ -61,7 +61,7 @@ function DashboardContent() {
 
         // Determine which specific record to show
         if (recordId) {
-          const selected = (userRecords || []).find((r: any) => String(r.id) === String(recordId));
+          const selected = (userRecords || []).find((r: any) => String(r.id || r._id) === String(recordId));
           if (!selected) {
             setError("Call analytics record not found or you do not have permission to view it.");
           } else {
